@@ -3,7 +3,9 @@ import 'dotenv/config';
 import express from 'express';
 import { z } from 'zod';
 
-import { getRelayerStatus, transferMnee, type TxResult } from './mneeSdk.js';
+import { checkGeminiStatus, scoreContent } from './gemini.js';
+// Switched to Ethereum MNEE (ERC-20) for hackathon compliance
+import { getRelayerStatus, transferMnee, isValidEthAddress, type TxResult } from './mneeEth.js';
 import {
   appendPayment,
   appendTip,
@@ -33,9 +35,10 @@ app.get('/v1/status', async (_req, res) => {
     res.json({ ok: true, ...status });
   } catch (e) {
     const dryRun = (process.env.DRY_RUN ?? 'true').toLowerCase() === 'true';
+    // Ethereum mode: need RELAYER_PRIVATE_KEY instead of RELAYER_WIF
     const required = dryRun
       ? ['DRY_RUN']
-      : ['DRY_RUN', 'MNEE_API_KEY', 'MNEE_ENVIRONMENT', 'RELAYER_ADDRESS', 'RELAYER_WIF'];
+      : ['DRY_RUN', 'RELAYER_ADDRESS', 'RELAYER_PRIVATE_KEY'];
 
     const missing = required.filter((k) => {
       const v = process.env[k];
@@ -46,14 +49,13 @@ app.get('/v1/status', async (_req, res) => {
       ok: false,
       error: (e as Error).message ?? 'status failed',
       mode: dryRun ? 'dry-run' : 'onchain',
-      environment: process.env.MNEE_ENVIRONMENT ?? 'sandbox',
+      network: 'ethereum-mainnet',
       missingVars: missing,
       varsPresent: {
         DRY_RUN: (process.env.DRY_RUN ?? '').trim() !== '',
-        MNEE_ENVIRONMENT: (process.env.MNEE_ENVIRONMENT ?? '').trim() !== '',
-        MNEE_API_KEY: (process.env.MNEE_API_KEY ?? '').trim() !== '',
+        ETHEREUM_RPC_URL: (process.env.ETHEREUM_RPC_URL ?? '').trim() !== '',
         RELAYER_ADDRESS: (process.env.RELAYER_ADDRESS ?? '').trim() !== '',
-        RELAYER_WIF: (process.env.RELAYER_WIF ?? '').trim() !== '',
+        RELAYER_PRIVATE_KEY: (process.env.RELAYER_PRIVATE_KEY ?? '').trim() !== '',
         DEMO_RECIPIENT_ADDRESS: (process.env.DEMO_RECIPIENT_ADDRESS ?? '').trim() !== '',
       },
     });
@@ -71,9 +73,9 @@ app.get('/v1/tips/:userAddress', async (req, res) => {
 });
 
 app.post('/v1/demo/run-scout-once', async (_req, res) => {
-  // MVP: stubbed "scout" that always tips a demo recipient.
+  // stubbed "scout" that always tips a demo recipient.
   const recipient =
-    process.env.DEMO_RECIPIENT_ADDRESS ?? '1LgxHPsSo2UTssKmxqVoNraJBaLBCN2NhW';
+    process.env.DEMO_RECIPIENT_ADDRESS ?? '0x136e49195511f4ca36d9582b203953d6d8b599f6';
 
   // Guardrail 1: Daily limit
   const todayTotal = await getTodayTipsTotal();
@@ -110,16 +112,84 @@ app.post('/v1/demo/run-scout-once', async (_req, res) => {
   res.json({ ok: true, tip });
 });
 
+// New: AI-powered content scoring endpoint
+const scoreContentSchema = z.object({
+  content: z.string().min(10).max(5000),
+  recipientAddress: z.string().optional(),
+});
+
+app.post('/v1/scout/evaluate', async (req, res) => {
+  const parsed = scoreContentSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  const { content, recipientAddress } = parsed.data;
+  // Default: user's Ethereum address for demo recipient
+  const recipient = recipientAddress ?? process.env.DEMO_RECIPIENT_ADDRESS ?? '0x136e49195511f4ca36d9582b203953d6d8b599f6';
+
+  // Guardrail 1: Daily limit
+  const todayTotal = await getTodayTipsTotal();
+  if (todayTotal + TIP_AMOUNT_MNEE > DAILY_TIP_LIMIT_MNEE) {
+    return res.status(429).json({
+      error: `Daily tip limit reached (${DAILY_TIP_LIMIT_MNEE} MNEE). Try again tomorrow.`,
+      todayTotal,
+      limit: DAILY_TIP_LIMIT_MNEE,
+    });
+  }
+
+  // Guardrail 2: Anti-spam
+  const recentlyTipped = await hasRecentTipToRecipient(recipient, ANTI_SPAM_MINUTES);
+  if (recentlyTipped) {
+    return res.status(429).json({
+      error: `Anti-spam: Already tipped this address within ${ANTI_SPAM_MINUTES} minutes.`,
+    });
+  }
+
+  // Score content with Gemini AI
+  const evaluation = await scoreContent(content);
+
+  // If qualified (score >= 7), send tip
+  let tip = null;
+  if (evaluation.isQualified) {
+    const result = await transferMnee({ to: recipient, amountMnee: TIP_AMOUNT_MNEE });
+    tip = {
+      id: crypto.randomUUID(),
+      createdAt: new Date().toISOString(),
+      from: 'MNEE-Scout-AI',
+      to: recipient,
+      amountMNEE: TIP_AMOUNT_MNEE,
+      ticketId: result.ticketId,
+      mode: result.mode,
+      aiScore: evaluation.score,
+    };
+    await appendTip(tip);
+  }
+
+  res.json({
+    ok: true,
+    evaluation,
+    rewarded: evaluation.isQualified,
+    tip,
+  });
+});
+
+// Gemini status check
+app.get('/v1/ai/status', async (_req, res) => {
+  const status = await checkGeminiStatus();
+  res.json({ ok: status.available, ...status });
+});
+
 app.post('/v1/demo/reset', async (_req, res) => {
   await resetStore();
   res.json({ ok: true, message: 'Store reset for demo' });
 });
 
 app.get('/v1/demo/qris', async (_req, res) => {
-  // For demo purposes - use relayer as merchant but payment will be simulated
+  // For demo purposes - use user's Ethereum address as demo merchant
   const merchantAddress = process.env.DEMO_MERCHANT_ADDRESS 
     ?? process.env.RELAYER_ADDRESS 
-    ?? '1LgxHPsSo2UTssKmxqVoNraJBaLBCN2NhW';
+    ?? '0x136e49195511f4ca36d9582b203953d6d8b599f6';
 
   return res.json({
     ok: true,

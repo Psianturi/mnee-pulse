@@ -25,7 +25,6 @@ class PulseApi {
       }
       if (decoded is String && decoded.trim().isNotEmpty) return decoded;
     } catch (_) {
-      // ignore json parse
     }
 
     return body.trim().isNotEmpty ? body.trim() : 'HTTP ${res.statusCode}';
@@ -131,6 +130,51 @@ class PulseApi {
     final decoded = jsonDecode(res.body);
     if (decoded is! Map<String, dynamic>) {
       throw const FormatException('Expected object response');
+    }
+
+    return decoded;
+  }
+
+  /// Evaluate content with AI and get tip if qualified (score >= 7)
+  Future<Map<String, dynamic>> evaluateContent({
+    required String content,
+    String? recipientAddress,
+  }) async {
+    final uri = Uri.parse('$apiBaseUrl/v1/scout/evaluate');
+    final res = await _client.post(
+      uri,
+      headers: const {'content-type': 'application/json'},
+      body: jsonEncode({
+        'content': content,
+        if (recipientAddress != null) 'recipientAddress': recipientAddress,
+      }),
+    );
+
+    if (res.statusCode != 200) {
+      throw Exception(
+        'Evaluation failed (${res.statusCode}): ${_extractErrorMessage(res)}',
+      );
+    }
+
+    final decoded = jsonDecode(res.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw const FormatException('Expected object response');
+    }
+
+    return decoded;
+  }
+
+  
+  Future<Map<String, dynamic>> getAiStatus() async {
+    final uri = Uri.parse('$apiBaseUrl/v1/ai/status');
+    final res = await _client.get(uri);
+    if (res.statusCode != 200) {
+      return {'ok': false, 'available': false};
+    }
+
+    final decoded = jsonDecode(res.body);
+    if (decoded is! Map<String, dynamic>) {
+      return {'ok': false, 'available': false};
     }
 
     return decoded;

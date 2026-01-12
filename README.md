@@ -4,20 +4,26 @@
 
 Mobile app for earning MNEE through AI-powered content tipping and spending via QR payments.
 
+##  Track
+
+**AI & Agent Payments** + **Commerce & Creator Tools**
+
+Built for the [MNEE Hackathon](https://mnee-eth.devpost.com/) using **MNEE ERC-20 stablecoin on Ethereum**.
+
+**Contract**: `0x8ccedbAe4916b79da7F3F612EfB2EB93A2bFD6cF`
+
 ## What is This?
 
 MNEE-Pulse connects content creators with real-world spending:
-- **Earn**: AI Scout monitors social media and tips quality educational content automatically
-- **Spend**: Use earned MNEE to pay at merchants via QR code (QRIS-like simulation)
-- **Gasless**: Users don't pay fees; relayer handles transaction costs
-
-Built for the **MNEE Hackathon** using the MNEE stablecoin on BSV blockchain.
+- **Earn**: AI Scout (Gemini) evaluates content quality and auto-tips quality posts
+- **Spend**: Use earned MNEE to pay at merchants via QR code (QRIS-like)
+- **Gasless**: Users don't pay fees; relayer handles Ethereum gas costs
 
 ## Demo Flow
 
 1. **Creator posts quality content** → Educational tweet about blockchain
-2. **AI Scout evaluates** → Gemini AI scores content quality
-3. **Auto-tip sent** → 0.1 MNEE sent to creator's wallet
+2. **AI Scout evaluates** → Gemini AI scores content quality (1-10)
+3. **Auto-tip sent** → If score ≥7, 0.1 MNEE sent via ERC-20 transfer
 4. **Creator checks app** → Balance shows in "Earn" tab
 5. **Buy coffee** → Scan QR, pay 25,000 IDR with MNEE
 
@@ -30,10 +36,11 @@ mnee-pulse/
 │       ├── screens/     # Earn & Spend UI
 │       ├── services/    # API client
 │       └── theme.dart   # Dark theme with gradients
-├── backend/             # Express + MNEE SDK
+├── backend/             # Express + ethers.js (ERC-20)
 │   └── src/
 │       ├── index.ts     # API routes
-│       ├── mneeSdk.ts   # MNEE transfer logic
+│       ├── mneeEth.ts   # MNEE ERC-20 transfer logic
+│       ├── gemini.ts    # AI content scoring
 │       └── store.ts     # JSON storage + guardrails
 └── android/ios/web/     # Platform configs
 ```
@@ -45,7 +52,7 @@ mnee-pulse/
 ```bash
 cd backend
 cp .env.example .env
-# Edit .env with your MNEE API key and wallet
+# Edit .env with your Ethereum wallet and keys
 npm install
 npm run dev
 ```
@@ -63,13 +70,13 @@ npm run dev
 
 | Variable | Description |
 |----------|-------------|
-| `MNEE_API_KEY` | From developer.mnee.net |
-| `MNEE_ENVIRONMENT` | `sandbox` or `production` |
-| `RELAYER_ADDRESS` | Your MNEE wallet address |
-| `RELAYER_WIF` | WIF private key (from `mnee export`) |
-| `DEMO_RECIPIENT_ADDRESS` | Wallet for demo tips |
-| `DRY_RUN` | `false` for real transactions |
-| `GEMINI_API_KEY` | (Optional) For AI content scoring |
+| `RELAYER_ADDRESS` | Your Ethereum wallet address (0x...) |
+| `RELAYER_PRIVATE_KEY` | Ethereum private key (64 hex chars) |
+| `ETHEREUM_RPC_URL` | (Optional) RPC endpoint, default: public RPC |
+| `DEMO_RECIPIENT_ADDRESS` | Demo tip recipient (Ethereum address) |
+| `DEMO_MERCHANT_ADDRESS` | Demo merchant (Ethereum address) |
+| `DRY_RUN` | `true` for demo, `false` for real transactions |
+| `GEMINI_API_KEY` | For AI content scoring |
 
 ### Flutter App
 
@@ -108,34 +115,22 @@ flutter run --dart-define=API_BASE_URL=http://YOUR_PC_IP:8000
 ## Screenshots
 
 The app features a modern dark theme with gradient cards and smooth animations:
-- **Earn Tab**: Shows total earned MNEE, live/dry-run status, recent tips
-- **Spend Tab**: QR scanner, merchant info, payment confirmation
+- **Earn Tab**: Shows total earned MNEE, live/dry-run status, recent tips, AI content evaluation
+- **Spend Tab**: QR scanner, demo merchant QR, payment confirmation
+
+## Tech Stack
+
+- **Mobile**: Flutter (iOS, Android, Web)
+- **Backend**: Node.js + Express + TypeScript
+- **Blockchain**: Ethereum (ethers.js) + MNEE ERC-20
+- **AI**: Google Gemini API (content scoring)
+- **Hosting**: Railway
 
 ## MNEE Resources
 
-- **MNEE Developer Portal**: [developer.mnee.net](https://developer.mnee.net)
-- **MNEE SDK**: `@mnee/ts-sdk` (npm)
-- **MNEE CLI**: `@mnee/cli` (for wallet management)
-
-## Environment Setup (MNEE Wallet)
-
-```bash
-# Install MNEE CLI
-npm install -g @mnee/cli
-
-# Login to sandbox
-mnee login --environment sandbox
-
-# Create wallet
-mnee wallet
-
-# Get test tokens
-mnee faucet
-
-# Export private key (for .env)
-mnee export
-```
-
+- **MNEE Website**: [mnee.io](https://mnee.io)
+- **Hackathon**: [mnee-eth.devpost.com](https://mnee-eth.devpost.com)
+- **Contract (Ethereum)**: `0x8ccedbAe4916b79da7F3F612EfB2EB93A2bFD6cF`
 
 ## License
 

@@ -10,6 +10,8 @@ type Tip = {
   amountMNEE: number;
   ticketId: string;
   mode: 'dry-run' | 'onchain';
+  aiScore?: number;
+  aiReason?: string;
 };
 
 type Payment = {

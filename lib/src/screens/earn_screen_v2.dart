@@ -15,9 +15,13 @@ class EarnScreen extends StatefulWidget {
 
 class _EarnScreenState extends State<EarnScreen> with TickerProviderStateMixin {
   final _api = PulseApi();
+  final _contentController = TextEditingController();
 
   bool _loading = false;
+  bool _evaluating = false;
   String? _error;
+  String? _successMessage;
+  Map<String, dynamic>? _lastEvaluation;
   List<Map<String, dynamic>> _tips = const [];
   Map<String, dynamic>? _status;
 
@@ -46,6 +50,7 @@ class _EarnScreenState extends State<EarnScreen> with TickerProviderStateMixin {
   void dispose() {
     _cooldownTimer?.cancel();
     _pulseController.dispose();
+    _contentController.dispose();
     super.dispose();
   }
 
@@ -99,6 +104,7 @@ class _EarnScreenState extends State<EarnScreen> with TickerProviderStateMixin {
     setState(() {
       _loading = true;
       _error = null;
+      _successMessage = null;
     });
 
     try {
@@ -131,6 +137,64 @@ class _EarnScreenState extends State<EarnScreen> with TickerProviderStateMixin {
       }
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _evaluateContent() async {
+    final content = _contentController.text.trim();
+    if (content.length < 10) {
+      setState(() => _error = 'Please enter at least 10 characters');
+      return;
+    }
+
+    final cooldownUntil = _scoutCooldownUntil;
+    if (cooldownUntil != null && DateTime.now().isBefore(cooldownUntil)) {
+      return;
+    }
+
+    setState(() {
+      _evaluating = true;
+      _error = null;
+      _successMessage = null;
+      _lastEvaluation = null;
+    });
+
+    try {
+      final result = await _api.evaluateContent(content: content);
+      if (!mounted) return;
+
+      final evaluation = result['evaluation'] as Map<String, dynamic>?;
+      final rewarded = result['rewarded'] == true;
+
+      setState(() => _lastEvaluation = evaluation);
+
+      if (rewarded) {
+        _setScoutCooldown(const Duration(minutes: 5));
+        _contentController.clear();
+        await _refresh();
+        setState(() {
+          _successMessage =
+              '🎉 Score: ${evaluation?['score']}/10 - You earned 0.1 MNEE!';
+        });
+      } else {
+        setState(() {
+          _error =
+              'Score: ${evaluation?['score']}/10 - Need 7+ to earn. ${evaluation?['reason'] ?? ''}';
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      final message = e.toString();
+      if (message.contains('Anti-spam') || message.contains('(429)')) {
+        _setScoutCooldown(const Duration(minutes: 5));
+        setState(
+          () => _error = 'Please wait a few minutes before submitting again.',
+        );
+      } else {
+        setState(() => _error = message);
+      }
+    } finally {
+      if (mounted) setState(() => _evaluating = false);
     }
   }
 
@@ -301,27 +365,153 @@ class _EarnScreenState extends State<EarnScreen> with TickerProviderStateMixin {
               ),
             ),
 
-            // Run Scout Button
+            // AI Content Evaluation Section
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: GradientButton(
-                  onPressed: scoutDisabled ? null : _runScoutOnce,
-                  isLoading: _loading,
-                  icon: Icons.auto_awesome,
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFF59E0B), Color(0xFFEF4444)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  child: Text(
-                    scoutCooldown == null
-                        ? 'Run AI Scout'
-                        : 'Run AI Scout ($scoutCooldown)',
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: GlassCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFFF59E0B), Color(0xFFEF4444)],
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              Icons.auto_awesome,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'AI Content Scout',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: PulseColors.textPrimary,
+                                  ),
+                                ),
+                                Text(
+                                  'Share quality content, earn MNEE tips',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: PulseColors.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _contentController,
+                        maxLines: 4,
+                        style: const TextStyle(color: PulseColors.textPrimary),
+                        decoration: InputDecoration(
+                          hintText:
+                              'Paste your content, tweet, or article here...\n\nAI will score it 1-10. Score 7+ earns a tip!',
+                          hintStyle: TextStyle(
+                            color: PulseColors.textMuted,
+                            fontSize: 14,
+                          ),
+                          filled: true,
+                          fillColor: PulseColors.cardBackground,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: PulseColors.border,
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: PulseColors.border,
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFF59E0B),
+                              width: 2,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      GradientButton(
+                        onPressed: scoutDisabled || _evaluating
+                            ? null
+                            : _evaluateContent,
+                        isLoading: _evaluating,
+                        icon: Icons.psychology,
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFF59E0B), Color(0xFFEF4444)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        child: Text(
+                          scoutCooldown == null
+                              ? 'Evaluate with Gemini AI'
+                              : 'Cooldown ($scoutCooldown)',
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
+
+            // Success message
+            if (_successMessage != null)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: PulseColors.earnGradient.colors.first
+                          .withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: PulseColors.earnGradient.colors.first,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.celebration,
+                          color: Color(0xFFF59E0B),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _successMessage!,
+                            style: const TextStyle(
+                              color: Color(0xFFF59E0B),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+            // Legacy Scout Button (hidden, kept for compatibility)
+            const SliverToBoxAdapter(child: SizedBox(height: 8)),
 
             // Error message
             if (_error != null)
