@@ -95,51 +95,6 @@ class _EarnScreenState extends State<EarnScreen> with TickerProviderStateMixin {
     }
   }
 
-  Future<void> _runScoutOnce() async {
-    final cooldownUntil = _scoutCooldownUntil;
-    if (cooldownUntil != null && DateTime.now().isBefore(cooldownUntil)) {
-      return;
-    }
-
-    setState(() {
-      _loading = true;
-      _error = null;
-      _successMessage = null;
-    });
-
-    try {
-      await _api.runScoutOnce();
-      _setScoutCooldown(const Duration(minutes: 5));
-      await _refresh();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Row(
-            children: [
-              Icon(Icons.check_circle, color: PulseColors.success),
-              SizedBox(width: 8),
-              Text('AI Scout found engagement! Tip sent.'),
-            ],
-          ),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      final message = e.toString();
-      if (message.contains('Anti-spam') || message.contains('(429)')) {
-        _setScoutCooldown(const Duration(minutes: 5));
-        setState(
-          () => _error =
-              'Anti-spam active. Please wait a few minutes before running AI Scout again.',
-        );
-      } else {
-        setState(() => _error = message);
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
   Future<void> _evaluateContent() async {
     final content = _contentController.text.trim();
     if (content.length < 10) {
@@ -467,6 +422,66 @@ class _EarnScreenState extends State<EarnScreen> with TickerProviderStateMixin {
                               : 'Cooldown ($scoutCooldown)',
                         ),
                       ),
+                      if (_lastEvaluation != null) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: PulseColors.cardBackground,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: PulseColors.border),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                width: 10,
+                                height: 10,
+                                margin: const EdgeInsets.only(top: 4),
+                                decoration: BoxDecoration(
+                                  color: ((_lastEvaluation?['score'] as num?)
+                                                  ?.toDouble() ??
+                                              0) >=
+                                          7
+                                      ? PulseColors.success
+                                      : PulseColors.warning,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Last score: ${_lastEvaluation?['score'] ?? '-'} / 10',
+                                      style: const TextStyle(
+                                        color: PulseColors.textPrimary,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      (_lastEvaluation?['reason']
+                                                  ?.toString()
+                                                  .trim()
+                                                  .isNotEmpty ??
+                                              false)
+                                          ? _lastEvaluation!['reason']
+                                              .toString()
+                                          : 'No reason provided.',
+                                      style: const TextStyle(
+                                        color: PulseColors.textSecondary,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -510,7 +525,6 @@ class _EarnScreenState extends State<EarnScreen> with TickerProviderStateMixin {
                 ),
               ),
 
-            // Legacy Scout Button (hidden, kept for compatibility)
             const SliverToBoxAdapter(child: SizedBox(height: 8)),
 
             // Error message
