@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../config.dart';
@@ -19,6 +21,7 @@ class _SpendScreenState extends State<SpendScreen>
   final _api = PulseApi();
 
   bool _paying = false;
+  bool _loadingDemoQr = false;
   String? _error;
   String? _successMessage;
   QrisPayload? _payload;
@@ -65,24 +68,24 @@ class _SpendScreenState extends State<SpendScreen>
     }
   }
 
-  void _useDemoQr() {
-    // Demo payload with valid MNEE sandbox address
-    const demoJson = '''
-{
-  "merchantName": "MNEE Coffee Co.",
-  "mneeAddress": "1LgxHPsSo2UTssKmxqVoNraJBaLBCN2NhW",
-  "amountIDR": 25000
-}
-''';
+  Future<void> _useDemoQr() async {
+    setState(() {
+      _loadingDemoQr = true;
+      _error = null;
+      _successMessage = null;
+    });
+
     try {
-      final payload = QrisPayload.fromQrString(demoJson);
-      setState(() {
-        _error = null;
-        _successMessage = null;
-        _payload = payload;
-      });
+      final demo = await _api.getDemoQris();
+      if (!mounted) return;
+
+      final payload = QrisPayload.fromQrString(jsonEncode(demo));
+      setState(() => _payload = payload);
     } catch (e) {
+      if (!mounted) return;
       setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _loadingDemoQr = false);
     }
   }
 
@@ -181,7 +184,7 @@ class _SpendScreenState extends State<SpendScreen>
               ),
               const SizedBox(height: 12),
               OutlinedButton.icon(
-                onPressed: _paying ? null : _useDemoQr,
+                onPressed: (_paying || _loadingDemoQr) ? null : _useDemoQr,
                 icon: const Icon(Icons.coffee),
                 label: const Text('Use Demo QR (Coffee Shop)'),
                 style: OutlinedButton.styleFrom(
@@ -285,164 +288,190 @@ class _SpendScreenState extends State<SpendScreen>
                         ),
                       )
                     : GlassCard(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            // Merchant header
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    gradient: PulseColors.spendGradient,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: const Icon(
-                                    Icons.store,
-                                    color: Colors.white,
-                                    size: 28,
-                                  ),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            return SingleChildScrollView(
+                              physics: const BouncingScrollPhysics(),
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  minHeight: constraints.maxHeight,
                                 ),
-                                const SizedBox(width: 12),
-                                Expanded(
+                                child: IntrinsicHeight(
                                   child: Column(
                                     crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                        CrossAxisAlignment.stretch,
                                     children: [
-                                      Text(
-                                        payload.merchantName,
-                                        style: const TextStyle(
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.bold,
-                                          color: PulseColors.textPrimary,
+                                      // Merchant header
+                                      Row(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.all(12),
+                                            decoration: BoxDecoration(
+                                              gradient:
+                                                  PulseColors.spendGradient,
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                            ),
+                                            child: const Icon(
+                                              Icons.store,
+                                              color: Colors.white,
+                                              size: 28,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  payload.merchantName,
+                                                  style: const TextStyle(
+                                                    fontSize: 20,
+                                                    fontWeight: FontWeight.bold,
+                                                    color:
+                                                        PulseColors.textPrimary,
+                                                  ),
+                                                ),
+                                                const Text(
+                                                  'Merchant',
+                                                  style: TextStyle(
+                                                    color:
+                                                        PulseColors.textMuted,
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          IconButton(
+                                            onPressed: _clearPayload,
+                                            icon: const Icon(
+                                              Icons.close,
+                                              color: PulseColors.textMuted,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 20),
+
+                                      // Address
+                                      Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: PulseColors.bgDark,
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            const Icon(
+                                              Icons.account_balance_wallet,
+                                              size: 16,
+                                              color: PulseColors.textMuted,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                payload.mneeAddress,
+                                                style: const TextStyle(
+                                                  color:
+                                                      PulseColors.textSecondary,
+                                                  fontSize: 12,
+                                                  fontFamily: 'monospace',
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                      const Text(
-                                        'Merchant',
-                                        style: TextStyle(
-                                          color: PulseColors.textMuted,
-                                          fontSize: 12,
+                                      const SizedBox(height: 20),
+
+                                      // Amount details
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          const Text(
+                                            'Amount',
+                                            style: TextStyle(
+                                              color: PulseColors.textSecondary,
+                                            ),
+                                          ),
+                                          Text(
+                                            'IDR ${payload.amountIdr.toStringAsFixed(0)}',
+                                            style: const TextStyle(
+                                              color: PulseColors.textPrimary,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          const Text(
+                                            'Rate',
+                                            style: TextStyle(
+                                              color: PulseColors.textSecondary,
+                                            ),
+                                          ),
+                                          Text(
+                                            '1 MNEE = IDR $demoRateIdrPerMnee',
+                                            style: const TextStyle(
+                                              color: PulseColors.textMuted,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const Divider(
+                                        height: 32,
+                                        color: PulseColors.bgCardLight,
+                                      ),
+
+                                      // You pay
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          const Text(
+                                            'You Pay',
+                                            style: TextStyle(
+                                              color: PulseColors.textSecondary,
+                                              fontSize: 16,
+                                            ),
+                                          ),
+                                          MneeAmountDisplay(
+                                            amount:
+                                                _amountMnee.toStringAsFixed(4),
+                                            large: true,
+                                          ),
+                                        ],
+                                      ),
+
+                                      const SizedBox(height: 20),
+
+                                      const Spacer(),
+
+                                      GradientButton(
+                                        onPressed: _paying ? null : _pay,
+                                        isLoading: _paying,
+                                        icon: Icons.send,
+                                        gradient: PulseColors.spendGradient,
+                                        child: Text(
+                                          'Pay ${_amountMnee.toStringAsFixed(4)} MNEE',
                                         ),
                                       ),
                                     ],
                                   ),
                                 ),
-                                IconButton(
-                                  onPressed: _clearPayload,
-                                  icon: const Icon(
-                                    Icons.close,
-                                    color: PulseColors.textMuted,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 20),
-
-                            // Address
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: PulseColors.bgDark,
-                                borderRadius: BorderRadius.circular(8),
                               ),
-                              child: Row(
-                                children: [
-                                  const Icon(
-                                    Icons.account_balance_wallet,
-                                    size: 16,
-                                    color: PulseColors.textMuted,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      payload.mneeAddress,
-                                      style: const TextStyle(
-                                        color: PulseColors.textSecondary,
-                                        fontSize: 12,
-                                        fontFamily: 'monospace',
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-
-                            // Amount details
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text(
-                                  'Amount',
-                                  style: TextStyle(
-                                    color: PulseColors.textSecondary,
-                                  ),
-                                ),
-                                Text(
-                                  'IDR ${payload.amountIdr.toStringAsFixed(0)}',
-                                  style: const TextStyle(
-                                    color: PulseColors.textPrimary,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text(
-                                  'Rate',
-                                  style: TextStyle(
-                                    color: PulseColors.textSecondary,
-                                  ),
-                                ),
-                                Text(
-                                  '1 MNEE = IDR $demoRateIdrPerMnee',
-                                  style: const TextStyle(
-                                    color: PulseColors.textMuted,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const Divider(
-                              height: 32,
-                              color: PulseColors.bgCardLight,
-                            ),
-
-                            // You pay
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text(
-                                  'You Pay',
-                                  style: TextStyle(
-                                    color: PulseColors.textSecondary,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                                MneeAmountDisplay(
-                                  amount: _amountMnee.toStringAsFixed(4),
-                                  large: true,
-                                ),
-                              ],
-                            ),
-
-                            const Spacer(),
-
-                            // Pay button
-                            GradientButton(
-                              onPressed: _paying ? null : _pay,
-                              isLoading: _paying,
-                              icon: Icons.send,
-                              gradient: PulseColors.spendGradient,
-                              child: Text(
-                                'Pay ${_amountMnee.toStringAsFixed(4)} MNEE',
-                              ),
-                            ),
-                          ],
+                            );
+                          },
                         ),
                       ),
               ),

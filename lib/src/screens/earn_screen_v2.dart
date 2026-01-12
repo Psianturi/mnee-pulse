@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../services/pulse_api.dart';
@@ -22,6 +24,9 @@ class _EarnScreenState extends State<EarnScreen> with TickerProviderStateMixin {
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
 
+  DateTime? _scoutCooldownUntil;
+  Timer? _cooldownTimer;
+
   @override
   void initState() {
     super.initState();
@@ -39,8 +44,25 @@ class _EarnScreenState extends State<EarnScreen> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    _cooldownTimer?.cancel();
     _pulseController.dispose();
     super.dispose();
+  }
+
+  void _setScoutCooldown(Duration duration) {
+    _cooldownTimer?.cancel();
+    final until = DateTime.now().add(duration);
+    setState(() => _scoutCooldownUntil = until);
+    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) return t.cancel();
+      final u = _scoutCooldownUntil;
+      if (u == null || DateTime.now().isAfter(u)) {
+        t.cancel();
+        setState(() => _scoutCooldownUntil = null);
+      } else {
+        setState(() {});
+      }
+    });
   }
 
   Future<void> _loadStatus() async {
@@ -69,6 +91,11 @@ class _EarnScreenState extends State<EarnScreen> with TickerProviderStateMixin {
   }
 
   Future<void> _runScoutOnce() async {
+    final cooldownUntil = _scoutCooldownUntil;
+    if (cooldownUntil != null && DateTime.now().isBefore(cooldownUntil)) {
+      return;
+    }
+
     setState(() {
       _loading = true;
       _error = null;
@@ -76,6 +103,7 @@ class _EarnScreenState extends State<EarnScreen> with TickerProviderStateMixin {
 
     try {
       await _api.runScoutOnce();
+      _setScoutCooldown(const Duration(minutes: 5));
       await _refresh();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -91,10 +119,29 @@ class _EarnScreenState extends State<EarnScreen> with TickerProviderStateMixin {
       );
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = e.toString());
+      final message = e.toString();
+      if (message.contains('Anti-spam') || message.contains('(429)')) {
+        _setScoutCooldown(const Duration(minutes: 5));
+        setState(
+          () => _error =
+              'Anti-spam active. Please wait a few minutes before running AI Scout again.',
+        );
+      } else {
+        setState(() => _error = message);
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  String? get _scoutCooldownLabel {
+    final until = _scoutCooldownUntil;
+    if (until == null) return null;
+    final remaining = until.difference(DateTime.now());
+    if (remaining.isNegative) return null;
+    final mm = remaining.inMinutes;
+    final ss = remaining.inSeconds % 60;
+    return '${mm.toString().padLeft(2, '0')}:${ss.toString().padLeft(2, '0')}';
   }
 
   double get _totalEarned {
@@ -108,6 +155,8 @@ class _EarnScreenState extends State<EarnScreen> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     final isOnline = _status?['mode'] == 'onchain';
     final relayerBalance = _status?['relayerMnee']?.toString() ?? '0';
+    final scoutCooldown = _scoutCooldownLabel;
+    final scoutDisabled = _loading || scoutCooldown != null;
 
     return Scaffold(
       body: SafeArea(
@@ -257,7 +306,7 @@ class _EarnScreenState extends State<EarnScreen> with TickerProviderStateMixin {
               child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: GradientButton(
-                  onPressed: _loading ? null : _runScoutOnce,
+                  onPressed: scoutDisabled ? null : _runScoutOnce,
                   isLoading: _loading,
                   icon: Icons.auto_awesome,
                   gradient: const LinearGradient(
@@ -265,7 +314,11 @@ class _EarnScreenState extends State<EarnScreen> with TickerProviderStateMixin {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-                  child: const Text('Run AI Scout'),
+                  child: Text(
+                    scoutCooldown == null
+                        ? 'Run AI Scout'
+                        : 'Run AI Scout ($scoutCooldown)',
+                  ),
                 ),
               ),
             ),

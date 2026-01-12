@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -45,6 +45,7 @@ async function readStore(): Promise<StoreShape> {
 }
 
 async function writeStore(store: StoreShape) {
+  await mkdir(dirname(storePath), { recursive: true });
   await writeFile(storePath, JSON.stringify(store, null, 2), 'utf-8');
 }
 

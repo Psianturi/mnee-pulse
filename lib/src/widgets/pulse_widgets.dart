@@ -2,6 +2,105 @@ import 'package:flutter/material.dart';
 
 import '../theme.dart';
 
+class Pulse extends StatefulWidget {
+  const Pulse({
+    super.key,
+    required this.child,
+    this.enabled = true,
+    this.duration = const Duration(milliseconds: 1200),
+    this.minScale = 1.0,
+    this.maxScale = 1.04,
+    this.minOpacity = 1.0,
+    this.maxOpacity = 1.0,
+  });
+
+  final Widget child;
+  final bool enabled;
+  final Duration duration;
+  final double minScale;
+  final double maxScale;
+  final double minOpacity;
+  final double maxOpacity;
+
+  @override
+  State<Pulse> createState() => _PulseState();
+}
+
+class _PulseState extends State<Pulse> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late Animation<double> _scale;
+  late Animation<double> _opacity;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: widget.duration);
+    _rebuildTweens();
+    _sync();
+  }
+
+  @override
+  void didUpdateWidget(covariant Pulse oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.duration != widget.duration) {
+      _controller.duration = widget.duration;
+    }
+    if (oldWidget.minScale != widget.minScale ||
+        oldWidget.maxScale != widget.maxScale ||
+        oldWidget.minOpacity != widget.minOpacity ||
+        oldWidget.maxOpacity != widget.maxOpacity) {
+      _rebuildTweens();
+    }
+    if (oldWidget.enabled != widget.enabled) {
+      _sync();
+    }
+  }
+
+  void _rebuildTweens() {
+    _scale =
+        Tween<double>(begin: widget.minScale, end: widget.maxScale).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+    _opacity = Tween<double>(
+      begin: widget.minOpacity,
+      end: widget.maxOpacity,
+    ).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  void _sync() {
+    if (widget.enabled) {
+      if (!_controller.isAnimating) {
+        _controller.repeat(reverse: true);
+      }
+    } else {
+      _controller.stop();
+      _controller.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Opacity(
+          opacity: _opacity.value,
+          child: Transform.scale(scale: _scale.value, child: child),
+        );
+      },
+      child: widget.child,
+    );
+  }
+}
+
 /// Gradient card with glass morphism effect
 class GlassCard extends StatelessWidget {
   const GlassCard({

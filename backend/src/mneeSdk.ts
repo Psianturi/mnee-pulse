@@ -78,10 +78,20 @@ export async function transferMnee(params: {
 
   const client = getClient();
 
-  const response = await client.transfer(
-    [{ address: params.to, amount: params.amountMnee }],
-    wif
-  );
+  let response: { ticketId?: string };
+  try {
+    response = await client.transfer(
+      [{ address: params.to, amount: params.amountMnee }],
+      wif
+    );
+  } catch (e) {
+    const message = (e as { message?: unknown })?.message;
+    const msg =
+      typeof message === 'string' && message.trim().length > 0
+        ? message
+        : String(e);
+    throw new Error(`MNEE transfer failed: ${msg}`);
+  }
 
   if (!response.ticketId) {
     throw new Error('Transfer failed: no ticketId returned');

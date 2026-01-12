@@ -32,7 +32,31 @@ app.get('/v1/status', async (_req, res) => {
     const status = await getRelayerStatus();
     res.json({ ok: true, ...status });
   } catch (e) {
-    res.status(500).json({ ok: false, error: (e as Error).message ?? 'status failed' });
+    const dryRun = (process.env.DRY_RUN ?? 'true').toLowerCase() === 'true';
+    const required = dryRun
+      ? ['DRY_RUN']
+      : ['DRY_RUN', 'MNEE_API_KEY', 'MNEE_ENVIRONMENT', 'RELAYER_ADDRESS', 'RELAYER_WIF'];
+
+    const missing = required.filter((k) => {
+      const v = process.env[k];
+      return v == null || String(v).trim() === '';
+    });
+
+    res.status(500).json({
+      ok: false,
+      error: (e as Error).message ?? 'status failed',
+      mode: dryRun ? 'dry-run' : 'onchain',
+      environment: process.env.MNEE_ENVIRONMENT ?? 'sandbox',
+      missingVars: missing,
+      varsPresent: {
+        DRY_RUN: (process.env.DRY_RUN ?? '').trim() !== '',
+        MNEE_ENVIRONMENT: (process.env.MNEE_ENVIRONMENT ?? '').trim() !== '',
+        MNEE_API_KEY: (process.env.MNEE_API_KEY ?? '').trim() !== '',
+        RELAYER_ADDRESS: (process.env.RELAYER_ADDRESS ?? '').trim() !== '',
+        RELAYER_WIF: (process.env.RELAYER_WIF ?? '').trim() !== '',
+        DEMO_RECIPIENT_ADDRESS: (process.env.DEMO_RECIPIENT_ADDRESS ?? '').trim() !== '',
+      },
+    });
   }
 });
 
@@ -48,10 +72,8 @@ app.get('/v1/tips/:userAddress', async (req, res) => {
 
 app.post('/v1/demo/run-scout-once', async (_req, res) => {
   // MVP: stubbed "scout" that always tips a demo recipient.
-  const recipient = process.env.DEMO_RECIPIENT_ADDRESS;
-  if (!recipient) {
-    return res.status(400).json({ error: 'DEMO_RECIPIENT_ADDRESS is not set' });
-  }
+  const recipient =
+    process.env.DEMO_RECIPIENT_ADDRESS ?? '1LgxHPsSo2UTssKmxqVoNraJBaLBCN2NhW';
 
   // Guardrail 1: Daily limit
   const todayTotal = await getTodayTipsTotal();
@@ -93,6 +115,26 @@ app.post('/v1/demo/reset', async (_req, res) => {
   res.json({ ok: true, message: 'Store reset for demo' });
 });
 
+app.get('/v1/demo/qris', async (_req, res) => {
+  const merchantAddress =
+    process.env.DEMO_MERCHANT_ADDRESS ?? process.env.DEMO_RECIPIENT_ADDRESS;
+
+  if (!merchantAddress) {
+    return res.status(500).json({
+      ok: false,
+      error:
+        'DEMO_MERCHANT_ADDRESS (or DEMO_RECIPIENT_ADDRESS) is not set on the backend',
+    });
+  }
+
+  return res.json({
+    ok: true,
+    merchantName: 'MNEE Coffee Co.',
+    mneeAddress: merchantAddress,
+    amountIDR: 5000,
+  });
+});
+
 const payQrisSchema = z.object({
   merchantAddress: z.string().min(1),
   amountIDR: z.number().int().positive(),
@@ -106,13 +148,41 @@ app.post('/v1/payments/qris', async (req, res) => {
   }
 
   const { merchantAddress, amountIDR, rateIDRPerMNEE } = parsed.data;
-  const amountMnee = roundTo(amountIDR / rateIDRPerMNEE, 5);
+  const amountMnee = computeAmountMnee(amountIDR, rateIDRPerMNEE);
+  if (amountMnee <= 0) {
+    return res.status(400).json({
+      error: 'Invalid payment amount after conversion',
+      amountMNEE: amountMnee,
+    });
+  }
+
+  const relayer = (process.env.RELAYER_ADDRESS ?? '').trim();
+  if (relayer.length > 0 && sameAddress(relayer, merchantAddress)) {
+    return res.status(400).json({
+      error:
+        'Invalid merchant address: merchantAddress must not be the relayer address',
+    });
+  }
 
   let result: TxResult;
   try {
     result = await transferMnee({ to: merchantAddress, amountMnee });
   } catch (e) {
-    return res.status(500).json({ error: (e as Error).message ?? 'transfer failed' });
+    const requestId = crypto.randomUUID();
+    // eslint-disable-next-line no-console
+    console.error('[pay:qris] failed', {
+      requestId,
+      merchantAddress,
+      amountIDR,
+      rateIDRPerMNEE,
+      amountMNEE: amountMnee,
+      error: (e as Error).message ?? String(e),
+    });
+
+    return res.status(500).json({
+      error: (e as Error).message ?? 'transfer failed',
+      requestId,
+    });
   }
 
   const payment = {
@@ -130,9 +200,14 @@ app.post('/v1/payments/qris', async (req, res) => {
   res.json({ ok: true, ...payment });
 });
 
-function roundTo(value: number, decimals: number) {
-  const p = 10 ** decimals;
-  return Math.round(value * p) / p;
+function computeAmountMnee(amountIdr: number, rateIdrPerMnee: number) {
+  // Use 1e8 "satoshi-like" precision to avoid float drift.
+  const sats = Math.round((amountIdr * 1e8) / rateIdrPerMnee);
+  return sats / 1e8;
+}
+
+function sameAddress(a: string, b: string) {
+  return a.trim().toLowerCase() == b.trim().toLowerCase();
 }
 
 const port = Number(process.env.PORT ?? '8000');
