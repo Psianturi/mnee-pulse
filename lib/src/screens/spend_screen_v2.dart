@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/qris_payload.dart';
 import '../services/pulse_api.dart';
@@ -22,7 +24,10 @@ class _SpendScreenState extends State<SpendScreen>
   bool _paying = false;
   bool _loadingDemoQr = false;
   String? _error;
-  String? _successMessage;
+  String? _successTitle;
+  String? _successDetail;
+  String? _successTicketId;
+  bool _successOnchain = false;
   QrisPayload? _payload;
 
   late AnimationController _checkController;
@@ -52,7 +57,10 @@ class _SpendScreenState extends State<SpendScreen>
   Future<void> _scan() async {
     setState(() {
       _error = null;
-      _successMessage = null;
+      _successTitle = null;
+      _successDetail = null;
+      _successTicketId = null;
+      _successOnchain = false;
     });
 
     final raw = await Navigator.of(context).push<String>(
@@ -72,7 +80,10 @@ class _SpendScreenState extends State<SpendScreen>
     setState(() {
       _loadingDemoQr = true;
       _error = null;
-      _successMessage = null;
+      _successTitle = null;
+      _successDetail = null;
+      _successTicketId = null;
+      _successOnchain = false;
     });
 
     try {
@@ -96,7 +107,10 @@ class _SpendScreenState extends State<SpendScreen>
     setState(() {
       _paying = true;
       _error = null;
-      _successMessage = null;
+      _successTitle = null;
+      _successDetail = null;
+      _successTicketId = null;
+      _successOnchain = false;
     });
 
     try {
@@ -112,12 +126,15 @@ class _SpendScreenState extends State<SpendScreen>
       final mode = res['mode']?.toString() ?? '';
       _checkController.forward(from: 0);
       setState(() {
-        if (mode == 'dry-run') {
-          _successMessage = 'Demo payment successful!\nTicket: $ticketId';
+        final onchain = mode != 'dry-run';
+        _successOnchain = onchain;
+        _successTicketId = ticketId;
+        if (!onchain) {
+          _successTitle = 'Demo Payment Success!';
+          _successDetail = 'Ticket created (simulated).';
         } else {
-          // Real blockchain tx - show tx hash
-          _successMessage =
-              '✅ Real Payment Success!\nTx: $ticketId\n\nView on Etherscan!';
+          _successTitle = 'Real Payment Success!';
+          _successDetail = 'Transaction hash (Ethereum mainnet).';
         }
         _payload = null;
       });
@@ -129,11 +146,32 @@ class _SpendScreenState extends State<SpendScreen>
     }
   }
 
+  Future<void> _copyToClipboard(String text) async {
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Copied to clipboard')),
+    );
+  }
+
+  Future<void> _openEtherscanTx(String txHash) async {
+    final uri = Uri.parse('https://etherscan.io/tx/$txHash');
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open Etherscan')),
+      );
+    }
+  }
+
   void _clearPayload() {
     setState(() {
       _payload = null;
       _error = null;
-      _successMessage = null;
+      _successTitle = null;
+      _successDetail = null;
+      _successTicketId = null;
+      _successOnchain = false;
     });
   }
 
@@ -226,7 +264,7 @@ class _SpendScreenState extends State<SpendScreen>
                 ),
 
               // Success message
-              if (_successMessage != null)
+              if (_successTitle != null)
                 Container(
                   padding: const EdgeInsets.all(16),
                   margin: const EdgeInsets.only(bottom: 16),
@@ -236,6 +274,7 @@ class _SpendScreenState extends State<SpendScreen>
                     border: Border.all(color: PulseColors.success),
                   ),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       ScaleTransition(
                         scale: CurvedAnimation(
@@ -250,10 +289,76 @@ class _SpendScreenState extends State<SpendScreen>
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        _successMessage!,
+                        _successTitle!,
                         textAlign: TextAlign.center,
-                        style: const TextStyle(color: PulseColors.success),
+                        style: const TextStyle(
+                          color: PulseColors.success,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
+                      if (_successDetail != null) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          _successDetail!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: PulseColors.textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                      if (_successTicketId != null) ...[
+                        const SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: PulseColors.bgCard,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: PulseColors.border),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: SelectableText(
+                                  _successTicketId!,
+                                  textAlign: TextAlign.left,
+                                  style: const TextStyle(
+                                    color: PulseColors.success,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Copy',
+                                onPressed: () =>
+                                    _copyToClipboard(_successTicketId!),
+                                icon: const Icon(
+                                  Icons.copy,
+                                  color: PulseColors.success,
+                                  size: 18,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      if (_successOnchain &&
+                          (_successTicketId ?? '').startsWith('0x')) ...[
+                        const SizedBox(height: 8),
+                        TextButton.icon(
+                          onPressed: () =>
+                              _openEtherscanTx(_successTicketId!.trim()),
+                          icon: const Icon(
+                            Icons.open_in_new,
+                            color: PulseColors.success,
+                            size: 18,
+                          ),
+                          label: const Text(
+                            'View on Etherscan',
+                            style: TextStyle(color: PulseColors.success),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
