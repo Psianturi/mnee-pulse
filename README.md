@@ -4,7 +4,7 @@
 
 Mobile app for earning MNEE through AI-powered content tipping and spending via QR payments.
 
-## 🏆 Track
+##  Track
 
 **AI & Agent Payments** + **Commerce & Creator Tools**
 
@@ -26,18 +26,18 @@ MNEE-Pulse connects content creators with real-world spending:
 
 ---
 
-## 🎬 Demo Flow
+##  Demo Flow
 
 1. **Open App** → Install APK on Android device
 2. **Earn Tab** → Paste quality content (tweet, article, etc.)
-3. **AI Evaluates** → Gemini scores 1-10, if ≥7 you earn 0.1 MNEE
+3. **AI Evaluates** → AI scores 1-10, if ≥7 you earn 0.1 MNEE
 4. **Spend Tab** → Tap "Use Demo QR (Coffee Shop)"
 5. **Pay** → Choose "Demo Pay" or "🔗 Real Tx (On-chain)"
 6. **Verify** → Real tx shows Etherscan link with tx hash
 
 ---
 
-## 🧪 For Judges: How to Test
+##  How to Test
 
 ### Step 1: Install APK
 Download and install the provided APK on your Android device.
@@ -65,29 +65,9 @@ Click to verify the actual MNEE ERC-20 transfer on Ethereum mainnet.
 
 ---
 
-## ⚠️ Important Notes
 
-### Why is this repo private?
-
-This MVP uses a **hosted relayer wallet** to provide gasless UX:
-- Relayer pays ETH gas fees
-- Relayer sends MNEE tokens on behalf of users
-
-To prevent abuse (random people draining the relayer), this repo is kept **private** during the hackathon. Source code is provided as ZIP for review.
-
-### Guardrails (Anti-Abuse)
-
-| Rule | Value | Description |
-|------|-------|-------------|
-| Daily Limit | 10 MNEE | Max tips per day |
-| Anti-Spam | 5 min | Cooldown between actions |
-| Tip Amount | 0.1 MNEE | Fixed tip per quality content |
-
----
 
 ## ▶️ Run From Source (Optional)
-
-If you want to run the project from source (instead of using the APK), use the hosted backend URL below, or run the backend locally.
 
 ### Prerequisites
 
