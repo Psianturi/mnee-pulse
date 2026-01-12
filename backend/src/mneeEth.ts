@@ -15,6 +15,7 @@ const ERC20_ABI = [
 export type TxResult = {
   ticketId: string; // tx hash for Ethereum
   mode: 'dry-run' | 'onchain';
+  confirmed?: boolean;
 };
 
 export type RelayerStatus = {
@@ -121,36 +122,56 @@ export async function transferMnee(params: {
     throw new Error(`Invalid Ethereum address: ${params.to}`);
   }
 
+  const signer = getWallet();
+  const contract = getMneeContract(signer);
+
+  // Get decimals (MNEE is likely 6 or 18 decimals)
+  const decimals = await contract.decimals();
+  const amount = parseUnits(params.amountMnee.toString(), decimals);
+
+  console.log(`[mneeEth] Transferring ${params.amountMnee} MNEE to ${params.to}`);
+
+  // Send ERC-20 transfer
+  let tx: { hash: string; wait: (confirms?: number) => Promise<{ blockNumber: number } | null> };
   try {
-    const signer = getWallet();
-    const contract = getMneeContract(signer);
-
-    // Get decimals (MNEE is likely 6 or 18 decimals)
-    const decimals = await contract.decimals();
-    const amount = parseUnits(params.amountMnee.toString(), decimals);
-
-    console.log(`[mneeEth] Transferring ${params.amountMnee} MNEE to ${params.to}`);
-
-    // Send ERC-20 transfer
-    const tx = await contract.transfer(params.to, amount);
-    console.log(`[mneeEth] Transaction submitted: ${tx.hash}`);
-
-    // Wait for confirmation (1 block)
-    const receipt = await tx.wait(1);
-    console.log(`[mneeEth] Transaction confirmed in block ${receipt.blockNumber}`);
-
-    return {
-      mode: 'onchain',
-      ticketId: tx.hash,
-    };
+    tx = await contract.transfer(params.to, amount);
   } catch (e) {
     const message = (e as { message?: unknown })?.message;
     const msg =
       typeof message === 'string' && message.trim().length > 0
         ? message
         : String(e);
-    throw new Error(`MNEE transfer failed: ${msg}`);
+    throw new Error(`MNEE transfer failed (submit): ${msg}`);
   }
+
+  console.log(`[mneeEth] Transaction submitted: ${tx.hash}`);
+
+  // Best-effort confirmation. Some public RPCs intermittently fail on receipt polling
+  // (e.g., "no response" for eth_getTransactionReceipt) even though the tx is mined.
+  let confirmed = false;
+  try {
+    const receipt = await tx.wait(1);
+    if (receipt?.blockNumber != null) {
+      confirmed = true;
+      console.log(`[mneeEth] Transaction confirmed in block ${receipt.blockNumber}`);
+    }
+  } catch (e) {
+    const message = (e as { message?: unknown })?.message;
+    const msg =
+      typeof message === 'string' && message.trim().length > 0
+        ? message
+        : String(e);
+    console.warn('[mneeEth] Receipt wait failed; returning tx hash anyway', {
+      txHash: tx.hash,
+      error: msg,
+    });
+  }
+
+  return {
+    mode: 'onchain',
+    ticketId: tx.hash,
+    confirmed,
+  };
 }
 
 // Helper to check if an address is valid Ethereum address
