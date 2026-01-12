@@ -116,15 +116,16 @@ app.post('/v1/demo/reset', async (_req, res) => {
 });
 
 app.get('/v1/demo/qris', async (_req, res) => {
-  const merchantAddress =
+  // For demo, use a different address than relayer to avoid self-transfer error
+  // This is a valid MNEE sandbox test address
+  const DEMO_COFFEE_SHOP_ADDRESS = '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa';
+
+  const relayer = (process.env.RELAYER_ADDRESS ?? '').trim();
+  let merchantAddress =
     process.env.DEMO_MERCHANT_ADDRESS ?? process.env.DEMO_RECIPIENT_ADDRESS;
 
-  if (!merchantAddress) {
-    return res.status(500).json({
-      ok: false,
-      error:
-        'DEMO_MERCHANT_ADDRESS (or DEMO_RECIPIENT_ADDRESS) is not set on the backend',
-    });
+  if (!merchantAddress || merchantAddress.trim().toLowerCase() === relayer.toLowerCase()) {
+    merchantAddress = DEMO_COFFEE_SHOP_ADDRESS;
   }
 
   return res.json({
