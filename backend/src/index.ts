@@ -3,8 +3,20 @@ import 'dotenv/config';
 import express from 'express';
 import { z } from 'zod';
 
-import { getRelayerStatus, transferMnee, type ChainTxResult } from './mneeErc20.js';
-import { appendPayment, appendTip, listTips } from './store.js';
+import { getRelayerStatus, transferMnee, type TxResult } from './mneeSdk.js';
+import {
+  appendPayment,
+  appendTip,
+  getTodayTipsTotal,
+  hasRecentTipToRecipient,
+  listTips,
+  resetStore,
+} from './store.js';
+
+// Guardrails
+const DAILY_TIP_LIMIT_MNEE = 10;
+const TIP_AMOUNT_MNEE = 0.1;
+const ANTI_SPAM_MINUTES = 5;
 
 const app = express();
 
@@ -41,7 +53,25 @@ app.post('/v1/demo/run-scout-once', async (_req, res) => {
     return res.status(400).json({ error: 'DEMO_RECIPIENT_ADDRESS is not set' });
   }
 
-  const amountMnee = 0.1;
+  // Guardrail 1: Daily limit
+  const todayTotal = await getTodayTipsTotal();
+  if (todayTotal + TIP_AMOUNT_MNEE > DAILY_TIP_LIMIT_MNEE) {
+    return res.status(429).json({
+      error: `Daily tip limit reached (${DAILY_TIP_LIMIT_MNEE} MNEE). Try again tomorrow.`,
+      todayTotal,
+      limit: DAILY_TIP_LIMIT_MNEE,
+    });
+  }
+
+  // Guardrail 2: Anti-spam (no duplicate tips to same address within X minutes)
+  const recentlyTipped = await hasRecentTipToRecipient(recipient, ANTI_SPAM_MINUTES);
+  if (recentlyTipped) {
+    return res.status(429).json({
+      error: `Anti-spam: Already tipped this address within ${ANTI_SPAM_MINUTES} minutes.`,
+    });
+  }
+
+  const amountMnee = TIP_AMOUNT_MNEE;
   const result = await transferMnee({ to: recipient, amountMnee });
 
   const tip = {
@@ -50,12 +80,17 @@ app.post('/v1/demo/run-scout-once', async (_req, res) => {
     from: 'MNEE-Scout',
     to: recipient,
     amountMNEE: amountMnee,
-    txHash: result.txHash,
+    ticketId: result.ticketId,
     mode: result.mode,
   };
 
   await appendTip(tip);
   res.json({ ok: true, tip });
+});
+
+app.post('/v1/demo/reset', async (_req, res) => {
+  await resetStore();
+  res.json({ ok: true, message: 'Store reset for demo' });
 });
 
 const payQrisSchema = z.object({
@@ -73,7 +108,7 @@ app.post('/v1/payments/qris', async (req, res) => {
   const { merchantAddress, amountIDR, rateIDRPerMNEE } = parsed.data;
   const amountMnee = roundTo(amountIDR / rateIDRPerMNEE, 5);
 
-  let result: ChainTxResult;
+  let result: TxResult;
   try {
     result = await transferMnee({ to: merchantAddress, amountMnee });
   } catch (e) {
@@ -87,7 +122,7 @@ app.post('/v1/payments/qris', async (req, res) => {
     amountIDR,
     rateIDRPerMNEE,
     amountMNEE: amountMnee,
-    txHash: result.txHash,
+    ticketId: result.ticketId,
     mode: result.mode,
   };
 
@@ -101,7 +136,8 @@ function roundTo(value: number, decimals: number) {
 }
 
 const port = Number(process.env.PORT ?? '8000');
-app.listen(port, () => {
+const host = process.env.HOST ?? '0.0.0.0';
+app.listen(port, host, () => {
   // eslint-disable-next-line no-console
-  console.log(`mnee-pulse-backend listening on :${port}`);
+  console.log(`mnee-pulse-backend listening on ${host}:${port}`);
 });

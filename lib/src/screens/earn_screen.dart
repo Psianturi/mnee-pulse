@@ -15,11 +15,22 @@ class _EarnScreenState extends State<EarnScreen> {
   bool _loading = false;
   String? _error;
   List<Map<String, dynamic>> _tips = const [];
+  Map<String, dynamic>? _status;
 
   @override
   void initState() {
     super.initState();
+    _loadStatus();
     _refresh();
+  }
+
+  Future<void> _loadStatus() async {
+    try {
+      final status = await _api.getStatus();
+      if (mounted) setState(() => _status = status);
+    } catch (_) {
+      // Ignore status errors, non-critical
+    }
   }
 
   Future<void> _refresh() async {
@@ -77,6 +88,42 @@ class _EarnScreenState extends State<EarnScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (_status != null)
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            _status!['mode'] == 'onchain'
+                                ? Icons.cloud_done
+                                : Icons.cloud_off,
+                            size: 20,
+                            color: _status!['mode'] == 'onchain'
+                                ? Colors.green
+                                : Colors.orange,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Mode: ${_status!['mode']}',
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                        ],
+                      ),
+                      if (_status!['relayerMnee'] != null) ...[
+                        const SizedBox(height: 4),
+                        Text('Relayer MNEE: ${_status!['relayerMnee']}'),
+                      ],
+                      if (_status!['relayerEth'] != null)
+                        Text('Relayer ETH: ${_status!['relayerEth']}'),
+                    ],
+                  ),
+                ),
+              ),
+            if (_status != null) const SizedBox(height: 12),
             FilledButton(
               onPressed: _loading ? null : _runScoutOnce,
               child: const Text('Run AI Scout (once)'),

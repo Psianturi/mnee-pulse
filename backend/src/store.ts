@@ -8,7 +8,7 @@ type Tip = {
   from: string;
   to: string;
   amountMNEE: number;
-  txHash: string;
+  ticketId: string;
   mode: 'dry-run' | 'onchain';
 };
 
@@ -19,7 +19,7 @@ type Payment = {
   amountIDR: number;
   rateIDRPerMNEE: number;
   amountMNEE: number;
-  txHash: string;
+  ticketId: string;
   mode: 'dry-run' | 'onchain';
 };
 
@@ -65,4 +65,32 @@ export async function appendPayment(payment: Payment) {
   const store = await readStore();
   store.payments.push(payment);
   await writeStore(store);
+}
+
+export async function resetStore() {
+  await writeStore({ tips: [], payments: [] });
+}
+
+export async function getTodayTipsTotal(): Promise<number> {
+  const store = await readStore();
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  return store.tips
+    .filter((t) => new Date(t.createdAt) >= todayStart)
+    .reduce((sum, t) => sum + t.amountMNEE, 0);
+}
+
+export async function hasRecentTipToRecipient(
+  recipient: string,
+  withinMinutes = 5
+): Promise<boolean> {
+  const store = await readStore();
+  const cutoff = new Date(Date.now() - withinMinutes * 60 * 1000);
+
+  return store.tips.some(
+    (t) =>
+      t.to.toLowerCase() === recipient.toLowerCase() &&
+      new Date(t.createdAt) >= cutoff
+  );
 }

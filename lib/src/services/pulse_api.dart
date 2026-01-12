@@ -44,6 +44,21 @@ class PulseApi {
     return decoded;
   }
 
+  Future<Map<String, dynamic>> getStatus() async {
+    final uri = Uri.parse('$apiBaseUrl/v1/status');
+    final res = await _client.get(uri);
+    if (res.statusCode != 200) {
+      throw Exception('Status failed (${res.statusCode})');
+    }
+
+    final decoded = jsonDecode(res.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw const FormatException('Expected object response');
+    }
+
+    return decoded;
+  }
+
   Future<Map<String, dynamic>> payQris({
     required String merchantAddress,
     required int amountIdr,

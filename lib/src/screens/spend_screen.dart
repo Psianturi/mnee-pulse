@@ -43,6 +43,26 @@ class _SpendScreenState extends State<SpendScreen> {
     }
   }
 
+  void _useDemoQr() {
+    // Demo payload: MNEE Coffee Co., 25000 IDR
+    const demoJson = '''
+{
+  "merchantName": "MNEE Coffee Co.",
+  "mneeAddress": "0x742d35Cc6634C0532925a3b844Bc9e7595f00000",
+  "amountIDR": 25000
+}
+''';
+    try {
+      final payload = QrisPayload.fromQrString(demoJson);
+      setState(() {
+        _error = null;
+        _payload = payload;
+      });
+    } catch (e) {
+      setState(() => _error = e.toString());
+    }
+  }
+
   Future<void> _pay() async {
     final payload = _payload;
     if (payload == null) return;
@@ -87,6 +107,12 @@ class _SpendScreenState extends State<SpendScreen> {
               onPressed: _paying ? null : _scan,
               icon: const Icon(Icons.qr_code_scanner_outlined),
               label: const Text('Scan QR (Simulated QRIS)'),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _paying ? null : _useDemoQr,
+              icon: const Icon(Icons.coffee),
+              label: const Text('Use Demo QR (Coffee Shop)'),
             ),
             const SizedBox(height: 12),
             if (_error != null) ...[
