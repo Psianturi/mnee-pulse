@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
-import '../config.dart';
 import '../models/qris_payload.dart';
 import '../services/pulse_api.dart';
 import '../theme.dart';
@@ -90,7 +89,7 @@ class _SpendScreenState extends State<SpendScreen>
     }
   }
 
-  Future<void> _pay() async {
+  Future<void> _pay({bool forceReal = false}) async {
     final payload = _payload;
     if (payload == null) return;
 
@@ -105,6 +104,7 @@ class _SpendScreenState extends State<SpendScreen>
         merchantAddress: payload.mneeAddress,
         amountUSD: payload.amountUSD,
         isDemo: payload.isDemo,
+        forceReal: forceReal,
       );
       if (!mounted) return;
 
@@ -112,9 +112,13 @@ class _SpendScreenState extends State<SpendScreen>
       final mode = res['mode']?.toString() ?? '';
       _checkController.forward(from: 0);
       setState(() {
-        _successMessage = mode == 'dry-run'
-            ? 'Demo payment successful!\nTicket: $ticketId'
-            : 'Payment successful!\nTicket: $ticketId';
+        if (mode == 'dry-run') {
+          _successMessage = 'Demo payment successful!\nTicket: $ticketId';
+        } else {
+          // Real blockchain tx - show tx hash
+          _successMessage =
+              '✅ Real Payment Success!\nTx: $ticketId\n\nView on Etherscan!';
+        }
         _payload = null;
       });
     } catch (e) {
@@ -461,14 +465,49 @@ class _SpendScreenState extends State<SpendScreen>
 
                                       const Spacer(),
 
+                                      // Demo Payment Button
                                       GradientButton(
-                                        onPressed: _paying ? null : _pay,
+                                        onPressed: _paying
+                                            ? null
+                                            : () => _pay(forceReal: false),
                                         isLoading: _paying,
-                                        icon: Icons.send,
+                                        icon: Icons.play_circle_outline,
                                         gradient: PulseColors.spendGradient,
                                         child: Text(
-                                          'Pay ${_amountMnee.toStringAsFixed(4)} MNEE',
+                                          'Demo Pay ${_amountMnee.toStringAsFixed(4)} MNEE',
                                         ),
+                                      ),
+
+                                      const SizedBox(height: 12),
+
+                                      // Real Blockchain Payment Button
+                                      GradientButton(
+                                        onPressed: _paying
+                                            ? null
+                                            : () => _pay(forceReal: true),
+                                        isLoading: _paying,
+                                        icon: Icons.currency_bitcoin,
+                                        gradient: const LinearGradient(
+                                          colors: [
+                                            Color(0xFF22C55E),
+                                            Color(0xFF10B981)
+                                          ],
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                        ),
+                                        child: Text(
+                                          '🔗 Real Tx (On-chain) ${_amountMnee.toStringAsFixed(4)} MNEE',
+                                        ),
+                                      ),
+
+                                      const SizedBox(height: 8),
+                                      const Text(
+                                        'Real Tx uses ETH gas & MNEE tokens',
+                                        style: TextStyle(
+                                          color: PulseColors.textMuted,
+                                          fontSize: 11,
+                                        ),
+                                        textAlign: TextAlign.center,
                                       ),
                                     ],
                                   ),

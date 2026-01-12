@@ -90,6 +90,7 @@ class PulseApi {
     required String merchantAddress,
     required double amountUSD,
     bool isDemo = false,
+    bool forceReal = false, 
   }) async {
     final uri = Uri.parse('$apiBaseUrl/v1/payments/qris');
     final res = await _client.post(
@@ -99,6 +100,7 @@ class PulseApi {
         'merchantAddress': merchantAddress,
         'amountUSD': amountUSD,
         'isDemo': isDemo,
+        'forceReal': forceReal,
       }),
     );
 

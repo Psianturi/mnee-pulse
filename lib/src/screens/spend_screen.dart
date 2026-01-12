@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../config.dart';
 import '../models/qris_payload.dart';
 import '../services/pulse_api.dart';
 import 'qr_scan_screen.dart';
@@ -22,7 +21,8 @@ class _SpendScreenState extends State<SpendScreen> {
   double get _amountMnee {
     final payload = _payload;
     if (payload == null) return 0;
-    return payload.amountIdr / demoRateIdrPerMnee;
+    // 1 MNEE = 1 USD (stablecoin)
+    return payload.amountUSD;
   }
 
   Future<void> _scan() async {
@@ -44,12 +44,12 @@ class _SpendScreenState extends State<SpendScreen> {
   }
 
   void _useDemoQr() {
-    // Demo payload: MNEE Coffee Co., 25000 IDR
+    // Demo payload: MNEE Coffee Co., $0.08 USD
     const demoJson = '''
 {
   "merchantName": "MNEE Coffee Co.",
   "mneeAddress": "0x742d35Cc6634C0532925a3b844Bc9e7595f00000",
-  "amountIDR": 25000
+  "amountUSD": 0.08
 }
 ''';
     try {
@@ -75,8 +75,7 @@ class _SpendScreenState extends State<SpendScreen> {
     try {
       final res = await _api.payQris(
         merchantAddress: payload.mneeAddress,
-        amountIdr: payload.amountIdr,
-        rateIdrPerMnee: demoRateIdrPerMnee,
+        amountUSD: payload.amountUSD,
       );
       if (!mounted) return;
 
@@ -146,10 +145,11 @@ class _SpendScreenState extends State<SpendScreen> {
                         const SizedBox(height: 8),
                         Text('Merchant: ${payload.mneeAddress}'),
                         const SizedBox(height: 8),
-                        Text('Amount: IDR ${payload.amountIdr}'),
-                        const SizedBox(height: 8),
                         Text(
-                          'Rate (demo): 1 MNEE = IDR $demoRateIdrPerMnee',
+                            'Amount: \$${payload.amountUSD.toStringAsFixed(2)} USD'),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Rate: 1 MNEE = 1 USD',
                         ),
                         const SizedBox(height: 8),
                         Text(

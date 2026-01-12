@@ -213,6 +213,7 @@ app.post('/v1/payments/qris', async (req, res) => {
 
   const { merchantAddress, amountUSD } = parsed.data;
   const isDemo = req.body.isDemo === true;
+  const forceReal = req.body.forceReal === true; 
   // 1 MNEE = 1 USD (stablecoin)
   const amountMnee = amountUSD;
   
@@ -228,8 +229,8 @@ app.post('/v1/payments/qris', async (req, res) => {
 
   let result: TxResult;
 
-  // For demo: simulate success if it would be self-transfer or isDemo flag
-  if (isDemo || isSelfTransfer) {
+  // For demo: simulate success UNLESS forceReal is true
+  if ((isDemo || isSelfTransfer) && !forceReal) {
     result = {
       mode: 'dry-run',
       ticketId: `DEMO-PAY-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
