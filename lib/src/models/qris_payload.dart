@@ -4,13 +4,13 @@ class QrisPayload {
   const QrisPayload({
     required this.merchantName,
     required this.mneeAddress,
-    required this.amountIdr,
+    required this.amountUSD,
     this.isDemo = false,
   });
 
   final String merchantName;
   final String mneeAddress;
-  final int amountIdr;
+  final double amountUSD;
   final bool isDemo;
 
   static QrisPayload fromQrString(String raw) {
@@ -21,7 +21,8 @@ class QrisPayload {
 
     final merchantName = decoded['merchantName'];
     final mneeAddress = decoded['mneeAddress'];
-    final amountIdr = decoded['amountIDR'];
+    // Support both amountUSD and legacy amountIDR
+    final amountUSD = decoded['amountUSD'] ?? (decoded['amountIDR'] != null ? (decoded['amountIDR'] as num) / 16000 : null);
     final isDemo = decoded['isDemo'] == true;
 
     if (merchantName is! String || merchantName.trim().isEmpty) {
@@ -32,14 +33,14 @@ class QrisPayload {
       throw const FormatException('mneeAddress is required');
     }
 
-    if (amountIdr is! num) {
-      throw const FormatException('amountIDR must be a number');
+    if (amountUSD is! num) {
+      throw const FormatException('amountUSD must be a number');
     }
 
     return QrisPayload(
       merchantName: merchantName,
       mneeAddress: mneeAddress,
-      amountIdr: amountIdr.round(),
+      amountUSD: amountUSD.toDouble(),
       isDemo: isDemo,
     );
   }

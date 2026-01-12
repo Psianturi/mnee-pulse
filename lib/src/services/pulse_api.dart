@@ -88,8 +88,7 @@ class PulseApi {
 
   Future<Map<String, dynamic>> payQris({
     required String merchantAddress,
-    required int amountIdr,
-    int? rateIdrPerMnee,
+    required double amountUSD,
     bool isDemo = false,
   }) async {
     final uri = Uri.parse('$apiBaseUrl/v1/payments/qris');
@@ -98,8 +97,7 @@ class PulseApi {
       headers: const {'content-type': 'application/json'},
       body: jsonEncode({
         'merchantAddress': merchantAddress,
-        'amountIDR': amountIdr,
-        'rateIDRPerMNEE': rateIdrPerMnee ?? demoRateIdrPerMnee,
+        'amountUSD': amountUSD,
         'isDemo': isDemo,
       }),
     );

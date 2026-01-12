@@ -13,13 +13,15 @@ class PulseColors {
   static const bgDark = Color(0xFF0F172A);
   static const bgCard = Color(0xFF1E293B);
   static const bgCardLight = Color(0xFF334155);
+  static const cardBackground = Color(0xFF1E293B); // alias for bgCard
+  static const border = Color(0xFF334155);
 
-  // Text
+ 
   static const textPrimary = Color(0xFFF8FAFC);
   static const textSecondary = Color(0xFF94A3B8);
   static const textMuted = Color(0xFF64748B);
 
-  // Status
+
   static const success = Color(0xFF22C55E);
   static const warning = Color(0xFFF59E0B);
   static const error = Color(0xFFEF4444);

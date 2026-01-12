@@ -174,7 +174,7 @@ app.post('/v1/scout/evaluate', async (req, res) => {
   });
 });
 
-// Gemini status check
+
 app.get('/v1/ai/status', async (_req, res) => {
   const status = await checkGeminiStatus();
   res.json({ ok: status.available, ...status });
@@ -195,15 +195,14 @@ app.get('/v1/demo/qris', async (_req, res) => {
     ok: true,
     merchantName: 'MNEE Coffee Co.',
     mneeAddress: merchantAddress,
-    amountIDR: 5000,
+    amountUSD: 0.08, 
     isDemo: true, // Flag for demo simulation
   });
 });
 
 const payQrisSchema = z.object({
   merchantAddress: z.string().min(1),
-  amountIDR: z.number().int().positive(),
-  rateIDRPerMNEE: z.number().int().positive(),
+  amountUSD: z.number().positive(), // USD amount (1 MNEE = 1 USD)
 });
 
 app.post('/v1/payments/qris', async (req, res) => {
@@ -212,13 +211,14 @@ app.post('/v1/payments/qris', async (req, res) => {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
 
-  const { merchantAddress, amountIDR, rateIDRPerMNEE } = parsed.data;
+  const { merchantAddress, amountUSD } = parsed.data;
   const isDemo = req.body.isDemo === true;
-  const amountMnee = computeAmountMnee(amountIDR, rateIDRPerMNEE);
+  // 1 MNEE = 1 USD (stablecoin)
+  const amountMnee = amountUSD;
   
   if (amountMnee <= 0) {
     return res.status(400).json({
-      error: 'Invalid payment amount after conversion',
+      error: 'Invalid payment amount',
       amountMNEE: amountMnee,
     });
   }
@@ -242,8 +242,7 @@ app.post('/v1/payments/qris', async (req, res) => {
       console.error('[pay:qris] failed', {
         requestId,
         merchantAddress,
-        amountIDR,
-        rateIDRPerMNEE,
+        amountUSD,
         amountMNEE: amountMnee,
         error: (e as Error).message ?? String(e),
       });
@@ -259,8 +258,7 @@ app.post('/v1/payments/qris', async (req, res) => {
     id: crypto.randomUUID(),
     createdAt: new Date().toISOString(),
     merchantAddress,
-    amountIDR,
-    rateIDRPerMNEE,
+    amountUSD,
     amountMNEE: amountMnee,
     ticketId: result.ticketId,
     mode: result.mode,

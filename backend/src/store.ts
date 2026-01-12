@@ -18,8 +18,7 @@ type Payment = {
   id: string;
   createdAt: string;
   merchantAddress: string;
-  amountIDR: number;
-  rateIDRPerMNEE: number;
+  amountUSD: number;
   amountMNEE: number;
   ticketId: string;
   mode: 'dry-run' | 'onchain';

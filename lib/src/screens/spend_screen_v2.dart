@@ -46,7 +46,8 @@ class _SpendScreenState extends State<SpendScreen>
   double get _amountMnee {
     final payload = _payload;
     if (payload == null) return 0;
-    return payload.amountIdr / demoRateIdrPerMnee;
+    // 1 MNEE = 1 USD (stablecoin)
+    return payload.amountUSD;
   }
 
   Future<void> _scan() async {
@@ -102,8 +103,7 @@ class _SpendScreenState extends State<SpendScreen>
     try {
       final res = await _api.payQris(
         merchantAddress: payload.mneeAddress,
-        amountIdr: payload.amountIdr,
-        rateIdrPerMnee: demoRateIdrPerMnee,
+        amountUSD: payload.amountUSD,
         isDemo: payload.isDemo,
       );
       if (!mounted) return;
@@ -404,7 +404,7 @@ class _SpendScreenState extends State<SpendScreen>
                                             ),
                                           ),
                                           Text(
-                                            'IDR ${payload.amountIdr.toStringAsFixed(0)}',
+                                            '\$${payload.amountUSD.toStringAsFixed(2)} USD',
                                             style: const TextStyle(
                                               color: PulseColors.textPrimary,
                                               fontWeight: FontWeight.w600,
@@ -423,9 +423,9 @@ class _SpendScreenState extends State<SpendScreen>
                                               color: PulseColors.textSecondary,
                                             ),
                                           ),
-                                          Text(
-                                            '1 MNEE = IDR $demoRateIdrPerMnee',
-                                            style: const TextStyle(
+                                          const Text(
+                                            '1 MNEE = 1 USD',
+                                            style: TextStyle(
                                               color: PulseColors.textMuted,
                                               fontSize: 12,
                                             ),
