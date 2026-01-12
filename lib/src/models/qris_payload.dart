@@ -5,11 +5,13 @@ class QrisPayload {
     required this.merchantName,
     required this.mneeAddress,
     required this.amountIdr,
+    this.isDemo = false,
   });
 
   final String merchantName;
   final String mneeAddress;
   final int amountIdr;
+  final bool isDemo;
 
   static QrisPayload fromQrString(String raw) {
     final decoded = jsonDecode(raw);
@@ -20,6 +22,7 @@ class QrisPayload {
     final merchantName = decoded['merchantName'];
     final mneeAddress = decoded['mneeAddress'];
     final amountIdr = decoded['amountIDR'];
+    final isDemo = decoded['isDemo'] == true;
 
     if (merchantName is! String || merchantName.trim().isEmpty) {
       throw const FormatException('merchantName is required');
@@ -37,6 +40,7 @@ class QrisPayload {
       merchantName: merchantName,
       mneeAddress: mneeAddress,
       amountIdr: amountIdr.round(),
+      isDemo: isDemo,
     );
   }
 }

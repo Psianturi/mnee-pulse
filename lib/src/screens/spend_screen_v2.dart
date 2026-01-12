@@ -104,13 +104,17 @@ class _SpendScreenState extends State<SpendScreen>
         merchantAddress: payload.mneeAddress,
         amountIdr: payload.amountIdr,
         rateIdrPerMnee: demoRateIdrPerMnee,
+        isDemo: payload.isDemo,
       );
       if (!mounted) return;
 
       final ticketId = res['ticketId']?.toString() ?? 'OK';
+      final mode = res['mode']?.toString() ?? '';
       _checkController.forward(from: 0);
       setState(() {
-        _successMessage = 'Payment successful!\nTicket: $ticketId';
+        _successMessage = mode == 'dry-run'
+            ? 'Demo payment successful!\nTicket: $ticketId'
+            : 'Payment successful!\nTicket: $ticketId';
         _payload = null;
       });
     } catch (e) {

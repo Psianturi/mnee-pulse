@@ -116,23 +116,17 @@ app.post('/v1/demo/reset', async (_req, res) => {
 });
 
 app.get('/v1/demo/qris', async (_req, res) => {
-  // For demo, use a different address than relayer to avoid self-transfer error
-  // This is a valid MNEE sandbox test address
-  const DEMO_COFFEE_SHOP_ADDRESS = '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa';
-
-  const relayer = (process.env.RELAYER_ADDRESS ?? '').trim();
-  let merchantAddress =
-    process.env.DEMO_MERCHANT_ADDRESS ?? process.env.DEMO_RECIPIENT_ADDRESS;
-
-  if (!merchantAddress || merchantAddress.trim().toLowerCase() === relayer.toLowerCase()) {
-    merchantAddress = DEMO_COFFEE_SHOP_ADDRESS;
-  }
+  // For demo purposes - use relayer as merchant but payment will be simulated
+  const merchantAddress = process.env.DEMO_MERCHANT_ADDRESS 
+    ?? process.env.RELAYER_ADDRESS 
+    ?? '1LgxHPsSo2UTssKmxqVoNraJBaLBCN2NhW';
 
   return res.json({
     ok: true,
     merchantName: 'MNEE Coffee Co.',
     mneeAddress: merchantAddress,
     amountIDR: 5000,
+    isDemo: true, // Flag for demo simulation
   });
 });
 
@@ -149,7 +143,9 @@ app.post('/v1/payments/qris', async (req, res) => {
   }
 
   const { merchantAddress, amountIDR, rateIDRPerMNEE } = parsed.data;
+  const isDemo = req.body.isDemo === true;
   const amountMnee = computeAmountMnee(amountIDR, rateIDRPerMNEE);
+  
   if (amountMnee <= 0) {
     return res.status(400).json({
       error: 'Invalid payment amount after conversion',
@@ -158,32 +154,35 @@ app.post('/v1/payments/qris', async (req, res) => {
   }
 
   const relayer = (process.env.RELAYER_ADDRESS ?? '').trim();
-  if (relayer.length > 0 && sameAddress(relayer, merchantAddress)) {
-    return res.status(400).json({
-      error:
-        'Invalid merchant address: merchantAddress must not be the relayer address',
-    });
-  }
+  const isSelfTransfer = relayer.length > 0 && sameAddress(relayer, merchantAddress);
 
   let result: TxResult;
-  try {
-    result = await transferMnee({ to: merchantAddress, amountMnee });
-  } catch (e) {
-    const requestId = crypto.randomUUID();
-    // eslint-disable-next-line no-console
-    console.error('[pay:qris] failed', {
-      requestId,
-      merchantAddress,
-      amountIDR,
-      rateIDRPerMNEE,
-      amountMNEE: amountMnee,
-      error: (e as Error).message ?? String(e),
-    });
 
-    return res.status(500).json({
-      error: (e as Error).message ?? 'transfer failed',
-      requestId,
-    });
+  // For demo: simulate success if it would be self-transfer or isDemo flag
+  if (isDemo || isSelfTransfer) {
+    result = {
+      mode: 'dry-run',
+      ticketId: `DEMO-PAY-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    };
+  } else {
+    try {
+      result = await transferMnee({ to: merchantAddress, amountMnee });
+    } catch (e) {
+      const requestId = crypto.randomUUID();
+      console.error('[pay:qris] failed', {
+        requestId,
+        merchantAddress,
+        amountIDR,
+        rateIDRPerMNEE,
+        amountMNEE: amountMnee,
+        error: (e as Error).message ?? String(e),
+      });
+
+      return res.status(500).json({
+        error: (e as Error).message ?? 'transfer failed',
+        requestId,
+      });
+    }
   }
 
   const payment = {
